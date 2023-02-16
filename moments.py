@@ -1,13 +1,17 @@
+'''
+Работа с моментами контуров
+'''
 import cv2
 import numpy as np
 
-from itertools import product
+k1 = 0.15   # максимальное отклонение по площади (m00)
+k2 = 0.1    # максимальное отклонение по моменту nu02
+k3 = 0.15   # максимальное отклонение по m01/m00
 
-k1 = 0.15
-k2 = 0.15
-k3 = 0.1
-
-def find_crosswalk(contours):
+def find_crosswalk(contours: np.ndarray) -> set:
+    '''
+    Обнаружение частей пешеходного перехода
+    '''
     moments = [cv2.moments(c) for c in contours]
     areas = sorted([(m['m00'], i) for i, m in enumerate(moments)], reverse=True)
 
@@ -43,12 +47,12 @@ def find_crosswalk(contours):
             if a[0] + b[0] == 0 or abs(a[0] - b[0]) / (a[0] + b[0]) > k1:
                 break
             if (abs((moments[a[1]]['nu02'] - moments[b[1]]['nu02'])
-                / (moments[a[1]]['nu02'] + moments[b[1]]['nu02'])) > k3 or
+                / (moments[a[1]]['nu02'] + moments[b[1]]['nu02'])) > k2 or
                 abs((moments[a[1]]['m01'] / a[0] - moments[b[1]]['m01'] / b[0])
-                / (moments[a[1]]['m01'] / a[0] + moments[b[1]]['m01'] / b[0])) > k2):
+                / (moments[a[1]]['m01'] / a[0] + moments[b[1]]['m01'] / b[0])) > k3):
                 continue
-            lines.add(a)
-            lines.add(b)
+            lines.add(a[1])
+            lines.add(b[1])
             # if len(lines) > 3:
             #     break
         if lines:
