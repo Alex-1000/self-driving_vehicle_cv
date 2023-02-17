@@ -7,13 +7,11 @@ from string import ascii_letters
 import cv2
 import matplotlib.pyplot as plt
 
-from project_typing import Image
-
 figsize = (12.8, 7.2)
 dpi = 150
 fontsize = 12
 
-def show_difference(original: Image, result: Image, filename: str, result_text='Результат', out_dir=None):
+def show_difference(original, result, filename: str, result_text='Результат', out_dir=None):
     '''
     Вывод на экран или в файл изображения с двумя картинками
     '''

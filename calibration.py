@@ -2,13 +2,11 @@
 Модуль калибровки камеры
 '''
 
-import numpy as np
 import cv2
-import matplotlib.pyplot as plt
-from pathlib import Path
-import time
+import numpy as np
 
 from display import show_difference
+
 
 def calibration(chess_dir, out_dir, nx, ny):
     '''

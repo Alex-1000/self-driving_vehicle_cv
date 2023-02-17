@@ -4,10 +4,8 @@
 
 import cv2
 
-from project_typing import Image
 
-
-def undistort(img: Image, object_points: list, image_points: list):
+def undistort(img, object_points: list, image_points: list):
     '''
     Возвращает изображение без искажений объектива
     img: изображение или путь к нему
@@ -19,7 +17,7 @@ def undistort(img: Image, object_points: list, image_points: list):
                                                        img.shape[1:], None, None)
     return cv2.undistort(img, mtx, dist, None, mtx)
 
-def remove_noise(img: Image, sturct_size: int) -> Image:
+def remove_noise(img, sturct_size: int):
     '''
     Использует операции close и open для убирания шума
     img: изображение

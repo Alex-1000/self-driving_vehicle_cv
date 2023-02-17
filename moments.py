@@ -4,11 +4,11 @@
 import cv2
 import numpy as np
 
-k1 = 0.15   # максимальное отклонение по площади (m00)
-k2 = 0.1    # максимальное отклонение по моменту nu02
-k3 = 0.15   # максимальное отклонение по m01/m00
+k1 = 0.24   # максимальное отклонение по площади (m00)
+k2 = 0.16   # максимальное отклонение по моменту nu02
+k3 = 0.16   # максимальное отклонение по m01/m00
 
-def find_crosswalk(contours: np.ndarray) -> set:
+def find_crosswalk(contours: np.ndarray) -> list:
     '''
     Обнаружение частей пешеходного перехода
     '''
@@ -57,4 +57,4 @@ def find_crosswalk(contours: np.ndarray) -> set:
             #     break
         if lines:
             break
-    return lines
+    return list(lines)
