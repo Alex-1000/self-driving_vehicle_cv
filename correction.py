@@ -5,16 +5,14 @@
 import cv2
 
 
-def undistort(img, object_points: list, image_points: list):
+def undistort(img, mtx, dist):
     '''
     Возвращает изображение без искажений объектива
     img: изображение или путь к нему
-    object_points и image_points: параметры калибровки
+    mtx и dist: параметры калибровки
     '''
     if isinstance(img, str):
         img = cv2.imread(img)
-    ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(object_points, image_points,
-                                                       img.shape[1:], None, None)
     return cv2.undistort(img, mtx, dist, None, mtx)
 
 def remove_noise(img, sturct_size: int):

@@ -30,8 +30,17 @@ def calibration(chess_dir, out_dir, nx, ny):
 
     failed = []     # файлы, для которых не найдены все углы
 
-    for name in chess_files:
-        img = cv2.imread(str(name))
+    # высота и ширина
+    size = None
+
+    for file in chess_files:
+        img = cv2.imread(str(file))
+
+        if size is None:
+            size = img.shape[:2]
+        elif img.shape[:2] != size:
+            print(f'Файл {file.name} имеет другой размер')
+            continue
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)    # в градации серого
 
@@ -52,11 +61,14 @@ def calibration(chess_dir, out_dir, nx, ny):
             # вывод углов на экран
             corners_image = img.copy()
             cv2.drawChessboardCorners(corners_image, (nx, ny), corners, ret)
-            show_difference(img, corners_image, name.name, out_dir)
+            # show_difference(img, corners_image, file.name, out_dir)
         else:
-            failed.append(name.name)
+            failed.append(file.name)
 
     if failed:
         print('Неподходящие для калибровки изображения:', *sorted(failed), sep='\n')
 
-    return object_points, image_points
+    ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
+        object_points, image_points, size[::-1], None, None
+    )
+    return mtx, dist, rvecs, tvecs, size
