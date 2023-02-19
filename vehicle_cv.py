@@ -1,12 +1,12 @@
+import math
 import pickle
 from pathlib import Path
 
-import cv2
-import matplotlib.pyplot as plt
+import cv2 as cv
 import numpy as np
 
 from calibration import calibration
-from coordinates import LinearFunction
+from coordinates import PolarLine
 from correction import undistort
 from display import show_difference
 from moments import find_crosswalk
@@ -14,6 +14,9 @@ from quantization import quantization
 
 if __debug__:
     import time
+
+c1 = 0.077568134
+c2 = 30.03752621
 
 chess_dir = Path('img/chess')     # папка с изображения для калибровки
 image_dir = Path('img/road')      # папка с входными изображениями
@@ -28,77 +31,84 @@ if __debug__:
     _timing_start = time.time()
 if Path('cal_settings').exists():
     with open('cal_settings', 'rb') as cal_settings:
-        mtx, dist, rvecs, tvecs, size = pickle.load(cal_settings)
+        mtx, dist, rvecs, tvecs, new_mtx, roi, input_size = pickle.load(cal_settings)
 else:
-    mtx, dist, rvecs, tvecs, size = calibration(chess_dir, out_dir, nx, ny)
+    mtx, dist, rvecs, tvecs, new_mtx, roi, input_size = calibration(chess_dir, out_dir, nx, ny)
     with open('cal_settings', 'wb') as cal_settings:
-        pickle.dump((mtx, dist, rvecs, tvecs, size), cal_settings)
+        pickle.dump((mtx, dist, rvecs, tvecs, new_mtx, roi, input_size), cal_settings)
 if __debug__:
     print('Калибровка:', round((time.time() - _timing_start)*1000, 1))
 
 # вывод одной из шахматных досок после корректировки для проверки
-# img = cv2.imread('img/chess/2.jpg')
+# img = cv.imread('img/chess/2.jpg')
 # show_difference(img, undistort(img, object_points, image_points), '2.jpg')
 
-# test = [Path('img/road/12.jpg'), Path('img/road/14.jpg'), Path('img/road/19.jpg')]
+def test_check(lines):
+    if lines is None or len(lines) < 4:
+        return True
+    return sum(
+        int(0 < l[0][1] < np.pi * 5/16 or np.pi * 11/16 < l[0][1] < 2*np.pi) for l in lines
+    ) < 4
+
+# test = [Path('img/road/2.jpg'), Path('img/road/7.jpg'), Path('img/road/12.jpg')]
 for file in image_dir.iterdir():
 # for file in test:
     if __debug__:
         _timing_start = time.time()
-    img = undistort(cv2.imread(str(file)), mtx, dist)
-    if img.shape[:2] != size:
+
+    original = cv.imread(str(file))
+    if original.shape[:2] != input_size:
         print(f'{file.name} имеет размер, отличный от остальных')
         continue
+    original = undistort(original, mtx, dist, new_mtx, roi)
+    size = original.shape[:2]    # высота и ширина изображения
     if __debug__:
         print('Калибровка изображения:', round((time.time() - _timing_start) * 1000, 1))
         _timing_start = time.time()
+
     # выделение трёх основных цветов
-    img_three, center = quantization(img, 3)
+    img, center = quantization(original, 3)
+
+    # закрываем горизонт
+    # TODO
+    # img = cv.rectangle(img, (0,0), (size[1], int(size[0]*0.3)), (0,0,0), -1)
+
     if __debug__:
         print('Выделение цветов:', round((time.time() - _timing_start)*1000, 1))
-    # show_difference(img, img_three, file.name)
-    if __debug__:
+        # show_difference(original, img, file.name)
         _timing_start = time.time()
-    c_black, c_gray, c_white = sorted(center, key=sum)
 
-    # вычесление порога для перевода в B/W изображение
+    c_black, c_gray, c_white = sorted(center, key=sum)
+    center = None
+
+    # вычисление порога для перевода в B/W изображение
     threshold = (sum(c_gray) + sum(c_white)) // 6
-    img_gray = cv2.cvtColor(img_three, cv2.COLOR_BGR2GRAY)
-    ret, img_bw = cv2.threshold(img_gray, threshold, 255, cv2.THRESH_BINARY)
+    ret, img = cv.threshold(
+        cv.cvtColor(img, cv.COLOR_BGR2GRAY), threshold, 255, cv.THRESH_BINARY
+    )
+
     if __debug__:
         print('Перевод в Ч/Б:', round((time.time() - _timing_start)*1000, 1))
+        # show_difference(original, img, file.name)
         _timing_start = time.time()
+    
     # выделение контуров
-    # contours, hierarchy = cv2.findContours(img_bw, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    contours, hierarchy = cv2.findContours(img_bw, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # contours, hierarchy = cv.findContours(img_bw, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    contours, hierarchy = cv.findContours(img, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
     if __debug__:
         print('Нахождение контуров:', round((time.time() - _timing_start)*1000, 1))
         _timing_start = time.time()
-    # img_contours = img.copy()
-    # cv2.drawContours(img_contours, contours, -1, (255,0,0), 3, cv2.LINE_AA, hierarchy, 1)
 
-    # убрать шум на некачественных изображениях
-    # img_close = cv2.morphologyEx(img_gray, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(10,10)))
-    # img_smooth = cv2.morphologyEx(img_close, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(10,10)))
-    # ret, img_smooth_bw = cv2.threshold(img_smooth, threshold, 255, cv2.THRESH_BINARY)
-    # contours, hierarchy = cv2.findContours(img_smooth_bw, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    # img_contours = img.copy()
-    # cv2.drawContours(img_contours, contours, -1, (255,0,0), 3, cv2.LINE_AA, hierarchy, 1)
-
-    # print(len(contours))
-    # show_difference(img, img_contours, '3.jpg')
-
-    # moments, areas = find_crosswalk(contours)
-
-    img_contours = img.copy()
     lines = find_crosswalk(contours)
     if __debug__:
-        print('Нахождение полос пешеходного перехода:', round((time.time() - _timing_start)*1000, 1))
+        print('Нахождение полос пешеходного перехода:',
+              round((time.time() - _timing_start)*1000, 1))
+        img = original.copy()
+        for l in lines:
+            cv.drawContours(img, [contours[l]], -1, (255,0,0), 3, cv.LINE_AA, None, 1)
+        # show_difference(original, img, file.name)
+        img1 = img.copy()
         _timing_start = time.time()
-    # изображение с найденными полосами пешеходного перехода
-    # for line in lines:
-    #     cv2.drawContours(img_contours, contours[line:line+1], -1, (255,0,0), 3, cv2.LINE_AA, None, 1)
-    # show_difference(img, img_contours, file.name, f'Найдено: {len(lines)}')
 
     # крайние левая и правая полосы
     edge_lines = [lines[0], lines[0]]
@@ -112,8 +122,31 @@ for file in image_dir.iterdir():
     if __debug__:
         print('Нахождение крайних полос:', round((time.time() - _timing_start)*1000, 1))
         _timing_start = time.time()
-    cv2.drawContours(img_contours, [contours[edge_lines[0]]], -1, (255,0,0), 3, cv2.LINE_AA, None, 1)
-    cv2.drawContours(img_contours, [contours[edge_lines[1]]], -1, (255,0,0), 3, cv2.LINE_AA, None, 1)
+
+    # img = np.zeros(size, dtype=np.uint8)
+    # img = original.copy()
+    # for l in lines:
+    #     cv.drawContours(img, [contours[l]], -1, (0,0,255), 4, cv.LINE_AA, None, 1)
+    
+    
+    
+
+    # cv.drawContours(img, [contours[edge_lines[0]]], -1, 255, 3, cv.LINE_AA, None, 1)
+    # cv.drawContours(img, [contours[edge_lines[1]]], -1, 255, 3, cv.LINE_AA, None, 1)
+    # lines = None
+    # x = 400
+    # while test_check(lines):
+    #     cv.dilate(img, cv.getStructuringElement(cv.MORPH_RECT, (2,2)))
+    #     # show_difference(original, img, file.name)
+    #     lines = cv.HoughLines(img, 0.95, np.pi/90, x, None, 0, 0)
+    #     x -= 10
+
+    # print(len(lines), x)
+    # # img = original.copy()
+    # for l in lines:
+    #     f = PolarLine(*l[0])
+    #     cv.line(img1, *f.segment(*size), (0, 255, 0), 3)
+    # # show_difference(original, img1, file.name)
 
     # углы пешеходного перехода
     corners = [
@@ -125,30 +158,61 @@ for file in image_dir.iterdir():
     if __debug__:
         print('Нахождение углов:', round((time.time() - _timing_start)*1000, 1))
         _timing_start = time.time()
-    # print(contours[edge_lines[0]][corners[0]], contours[edge_lines[1]][corners[1]],
-    #     contours[edge_lines[0]][corners[2]], contours[edge_lines[1]][corners[3]])
-
-    size = img.shape[:2]    # высота и ширина изображения
 
     # линии сверху и снизу пешеходного перехода
-    f1 = LinearFunction.from_points(contours[edge_lines[0]][corners[0]][0], 
-                                    contours[edge_lines[1]][corners[1]][0])
-    f2 = LinearFunction.from_points(contours[edge_lines[0]][corners[2]][0],
-                                    contours[edge_lines[1]][corners[3]][0])
-    line_1 = f1.rectangle_line(size[::-1], round_digits=None)
-    line_2 = f2.rectangle_line(size[::-1], round_digits=None)
+    top_edge = PolarLine.from_points(
+        contours[edge_lines[0]][corners[2]][0],
+        contours[edge_lines[1]][corners[3]][0]
+    )
+    bottom_edge = PolarLine.from_points(
+        contours[edge_lines[0]][corners[0]][0], 
+        contours[edge_lines[1]][corners[1]][0]
+    )
     if __debug__:
-        print('Выделение границ пешеходного перехода:', round((time.time() - _timing_start)*1000, 1), '\n')
+        print('Выделение верхних и нижних границ пешеходного перехода:',
+              round((time.time() - _timing_start)*1000, 1), '\n')
     # img_contours = img.copy()
     # img_contours = np.zeros(size, dtype=np.uint8)
-    cv2.line(img_contours, *line_1, [0, 255, 0], 3)
-    cv2.line(img_contours, *line_2, [0, 0, 255], 3)
-    show_difference(img, img_contours, file.name)
+    img = original.copy()
+    cv.line(img, *top_edge.segment(*size), [0, 255, 0], 3)
+    cv.line(img, *bottom_edge.segment(*size), [0, 0, 255], 3)
+    # cv.drawContours(img_contours, [contours[edge_lines[0]]], -1, (255,0,0), 3, cv.LINE_AA, None, 1)
+    # cv.drawContours(img_contours, [contours[edge_lines[1]]], -1, (255,0,0), 3, cv.LINE_AA, None, 1)
+
+    # x = round(min(
+    #     bottom_edge.distance((size[1]//4, size[0])),
+    #     bottom_edge.distance((size[1]*3//4, size[0]))
+    # ) * 0.2, 2)
+    x = bottom_edge.distance((size[1]*5//8, size[0]))
+    print(file.name, round(x * c1 + c2, 1))
+    # show_difference(original, img, file.name, result_text=str(x))
+
+    # ищем левую нижнюю и левую верхнюю точки левого контура
+    # delta = 100
+    # 0: левый контур, 1: правый контур
+    # .,0: левая верхняя, .,1: правая верхняя, .,2: левая нижняя, .,3: правая нижняя
+    # corners = [
+    #     [ (size[1], None), (0, None), (size[1], None), (0, None) ], 
+    #     [ (size[1], None), (0, None), (size[1], None), (0, None) ]
+    # ]
+    # for e, edge in enumerate(edge_lines):
+    #     c_sorted = contours[edge][:,0][contours[edge][:,0,1].argsort()]
+    #     for p in c_sorted:
+    #         if (corners[e][0][1] is not None
+    #            and abs((corners[e][0][0] - corners[e][1][0]) * np.cos(top_edge.theta))
+    #            * 2 + 10 + c_sorted[0][1] < p[1]):
+    #             break
+    #         if top_edge.distance(p) > delta:
+    #             continue
+    #         corners[e][0] = min(corners[e][0], p, key=lambda x: x[0])
+    #         corners[e][1] = max(corners[e][0], p, key=lambda x: x[0])
+
+
 
     # вывод контуров в порядке уменьшения площади
     # for a in areas:
     #     img_contours = img.copy()
-    #     cv2.drawContours(img_contours, contours[a[1]:a[1]+1], -1, (255,0,0), 3, cv2.LINE_AA, None, 1)
+    #     cv.drawContours(img_contours, contours[a[1]:a[1]+1], -1, (255,0,0), 3, cv.LINE_AA, None, 1)
     #     print(a[1], moments[a[1]])
     #     print(a[1], moments[a[1]]['m00'] )
     #     show_difference(img_bw, img_contours, str(a[1]))

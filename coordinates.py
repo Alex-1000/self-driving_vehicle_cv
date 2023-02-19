@@ -2,60 +2,113 @@
 Работа с координатами
 '''
 
+from __future__ import annotations
+
+import math
+from math import atan2, cos, pi, sin
 from typing import Tuple
 
-class LinearFunction:
-    '''
-    Линейная функция y = kx + b
-    Параметр round_digits=None преобразует float в int
-    '''
-    k: float
-    b: float
+# pi = math.pi
 
-    def __init__(self, k: float, b: float):
-        self.k = k
-        self.b = b
+# def sin(x, precision=7) -> float:
+#     return round(math.sin(x), precision)
+# def cos(x, precision=7) -> float:
+#     return round(math.cos(x), precision)
+# def arctan(x, y, precision=7) -> float:
+#     return round(math.atan2(x, y), precision)
+
+def pol2dec(rho: float, theta: float, round_digits=0) -> Tuple[float, float]:
+    '''
+    Декартовы координаты точки из полярных
+    '''
+    return (round(rho * sin(theta), round_digits), round(rho * cos(theta), round_digits))
+
+def dec2pol(x: float, y: float) -> Tuple[float, float]:
+    '''
+    Полярные координаты точки из декартовых
+    '''
+    # return ((x ** 2 + y ** 2) ** 0.5, arctan(y, x))
+    return ((x ** 2 + y ** 2) ** 0.5, atan2(y, x))
+
+class PolarLine:
+    '''
+    Линия в полярной системе координат
+    '''
+    rho: float
+    theta: float
+
+    def __init__(self, rho: float, theta: float):
+        self.rho = rho
+        self.theta = theta
 
     @staticmethod
     def from_points(p1: Tuple[int, int], p2: Tuple[int, int]):
         '''
-        Определение линейной функции по двум точкам
+        Прямая по двум точкам
         '''
-        k = (p1[1] - p2[1]) / (p1[0] - p2[0])
-        b = p1[1] - k * p1[0]
-        return LinearFunction(k, b)
+        theta = -atan2(p2[0] - p1[0], p2[1] - p1[1])
+        rho = p1[0] * cos(theta) + p1[1] * sin(theta)
+        return PolarLine(rho, theta)
 
-    def y(self, x: float, round_digits=0) -> float:
+    def y(self, x: float, default=None) -> float:
         '''
-        Значение y из x
+        y от x в декартовых координатах
         '''
-        return round(self.k * x + self.b, round_digits)
+        if sin(self.theta) == 0:
+            return default
+        return (self.rho - x * cos(self.theta)) / sin(self.theta)
 
-    def x(self, y: float, round_digits=0) -> float:
+    def x(self, y: float, default=None) -> float:
         '''
-        Значение x из y
+        x от y в декартовых координатах
         '''
-        return round((y - self.b) / self.k, round_digits)
+        if cos(self.theta) == 0:
+            return default
+        return (self.rho - y * sin(self.theta)) / cos(self.theta)
 
-    def rectangle_line(self, size: Tuple[int, int], round_digits=0) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+    def intersection(self, line: PolarLine, to_int=True) -> Tuple[float, float]:
         '''
-        Пересечение линии с прямоугольником (с координатами (0;0);size)
+        Пересечение с прямой в декартовых координатах
         '''
-        w, h = size[0] - 1, size[1] - 1
+        if sin(line.theta - self.theta) == 0:
+            return None
+        x = ((line.rho * sin(self.theta) - self.rho * sin(line.theta))
+             / sin(self.theta - line.theta))
+        y = self.y(x, default=line.rho)
+        return (round(x), round(y)) if to_int else (x, y)
 
-        x0, y0 = 0, self.y(0)
-        if y0 < 0:
-            x0, y0 = self.x(0), 0
-        elif y0 > h:
-            x0, y0 = self.x(h), h
+    def segment(self, height: int, width: int) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+        '''
+        Возвращает сегмент в пределах прямоугольника (0;0)x(width;height)
+        '''
+        result = set()
+        x = 0
+        y = self.y(x)
+        if y is not None and 0 <= y < height:
+            result.add((x, round(y)))
 
-        x1, y1 = w, self.y(w)
-        if y1 < 0:
-            x1, y1 = self.x(w), w
-        elif y1 > h:
-            x1, y1 = self.x(h), h
+        x = width - 1
+        y = self.y(x)
+        if y is not None and 0 <= y < height:
+            result.add((x, round(y)))
 
-        return (
-                (round(x0, round_digits), round(y0, round_digits)),
-                (round(x1, round_digits), round(y1, round_digits))
-            )
+        if len(result) < 2:
+            y = 0
+            x = self.x(y)
+            if x is not None and 0 <= x < width:
+                result.add((round(x), y))
+
+            if len(result) < 2:
+                y = height - 1
+                x = self.x(y)
+                if x is not None and 0 <= x < width:
+                    result.add((round(x), y))
+        return result
+
+    def distance(self, point: Tuple[int, int]) -> float:
+        '''
+        Расстояние от точки до прямой
+        '''
+        rho, theta = dec2pol(*point)
+        return abs(self.rho - rho * cos(abs(self.theta - theta)))
+        

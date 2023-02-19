@@ -2,18 +2,19 @@
 Коррекция изображений
 '''
 
-import cv2
+import cv2 as cv
 
 
-def undistort(img, mtx, dist):
+def undistort(img, mtx, dist, new_mtx, roi):
     '''
     Возвращает изображение без искажений объектива
-    img: изображение или путь к нему
-    mtx и dist: параметры калибровки
+    img: путь к изображению
+    mtx, dist и new_mtx: параметры калибровки
+    roi: область интереса
     '''
-    if isinstance(img, str):
-        img = cv2.imread(img)
-    return cv2.undistort(img, mtx, dist, None, mtx)
+    img = cv.undistort(img, mtx, dist, None, new_mtx)
+    x, y, w, h = roi
+    return img[y:y+h, x:x+w]
 
 def remove_noise(img, sturct_size: int):
     '''
@@ -21,7 +22,7 @@ def remove_noise(img, sturct_size: int):
     img: изображение
     struct_size: размер структуры (большее значение = меньше шума и большее закругление)
     '''
-    structure = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(sturct_size,sturct_size))
-    img_close = cv2.morphologyEx(img, cv2.MORPH_CLOSE, structure)
-    img_smooth = cv2.morphologyEx(img_close, cv2.MORPH_OPEN, structure)
+    structure = cv.getStructuringElement(cv.MORPH_ELLIPSE,(sturct_size,sturct_size))
+    img_close = cv.morphologyEx(img, cv.MORPH_CLOSE, structure)
+    img_smooth = cv.morphologyEx(img_close, cv.MORPH_OPEN, structure)
     return img_smooth
