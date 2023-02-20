@@ -4,6 +4,7 @@
 import numpy as np
 import cv2 as cv
 
+
 def quantization(img, color_count=3, scale=0.25):
     '''
     Приведение изображения к картинке из color_count цветов

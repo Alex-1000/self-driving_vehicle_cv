@@ -63,6 +63,7 @@ def calibration(chess_dir, out_dir, nx, ny, alpha=0.5):
             corners_image = img.copy()
             cv.drawChessboardCorners(corners_image, (nx, ny), corners, ret)
             # show_difference(img, corners_image, file.name, out_dir)
+            show_difference(img, corners_image, file.name)
         else:
             failed.append(file.name)
 

@@ -4,18 +4,9 @@
 
 from __future__ import annotations
 
-import math
-from math import atan2, cos, pi, sin
+from math import atan2, cos, sin
 from typing import Tuple
 
-# pi = math.pi
-
-# def sin(x, precision=7) -> float:
-#     return round(math.sin(x), precision)
-# def cos(x, precision=7) -> float:
-#     return round(math.cos(x), precision)
-# def arctan(x, y, precision=7) -> float:
-#     return round(math.atan2(x, y), precision)
 
 def pol2dec(rho: float, theta: float, round_digits=0) -> Tuple[float, float]:
     '''

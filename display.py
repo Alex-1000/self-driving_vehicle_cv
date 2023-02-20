@@ -5,6 +5,10 @@ from pathlib import Path
 from string import ascii_letters
 
 import cv2 as cv
+import matplotlib
+
+matplotlib.use('TkAgg')
+
 import matplotlib.pyplot as plt
 
 figsize = (12.8, 7.2)
@@ -30,4 +34,4 @@ def show_difference(original, result, filename: str, result_text='Результ
                 break
     else:
         plt.show()
-    plt.close()
+    # plt.close()

@@ -1,9 +1,11 @@
-import math
 import pickle
 from pathlib import Path
 
 import cv2 as cv
 import numpy as np
+import torch
+# модель машинного обучения YOLOv5
+model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
 
 from calibration import calibration
 from coordinates import PolarLine
@@ -26,6 +28,7 @@ out_dir = Path('img/out')         # папка для результатов
 nx = 6
 ny = 8
 
+
 # Разовая калибровка камеры (для повторной калибровки удалить файл cal_settings)
 if __debug__:
     _timing_start = time.time()
@@ -41,7 +44,7 @@ if __debug__:
 
 # вывод одной из шахматных досок после корректировки для проверки
 # img = cv.imread('img/chess/2.jpg')
-# show_difference(img, undistort(img, object_points, image_points), '2.jpg')
+# show_difference(img, undistort(img, mtx, dist, new_mtx, roi), '2.jpg')
 
 def test_check(lines):
     if lines is None or len(lines) < 4:
@@ -68,14 +71,13 @@ for file in image_dir.iterdir():
 
     # выделение трёх основных цветов
     img, center = quantization(original, 3)
-
     # закрываем горизонт
     # TODO
     # img = cv.rectangle(img, (0,0), (size[1], int(size[0]*0.3)), (0,0,0), -1)
 
     if __debug__:
         print('Выделение цветов:', round((time.time() - _timing_start)*1000, 1))
-        # show_difference(original, img, file.name)
+        show_difference(original, img, file.name)
         _timing_start = time.time()
 
     c_black, c_gray, c_white = sorted(center, key=sum)
@@ -83,18 +85,18 @@ for file in image_dir.iterdir():
 
     # вычисление порога для перевода в B/W изображение
     threshold = (sum(c_gray) + sum(c_white)) // 6
-    ret, img = cv.threshold(
+    ret, img_bw = cv.threshold(
         cv.cvtColor(img, cv.COLOR_BGR2GRAY), threshold, 255, cv.THRESH_BINARY
+
     )
 
     if __debug__:
         print('Перевод в Ч/Б:', round((time.time() - _timing_start)*1000, 1))
-        # show_difference(original, img, file.name)
+        show_difference(original, img_bw, file.name)
         _timing_start = time.time()
     
     # выделение контуров
-    # contours, hierarchy = cv.findContours(img_bw, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
-    contours, hierarchy = cv.findContours(img, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    contours, hierarchy = cv.findContours(img_bw, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
     if __debug__:
         print('Нахождение контуров:', round((time.time() - _timing_start)*1000, 1))
         _timing_start = time.time()
@@ -106,7 +108,7 @@ for file in image_dir.iterdir():
         img = original.copy()
         for l in lines:
             cv.drawContours(img, [contours[l]], -1, (255,0,0), 3, cv.LINE_AA, None, 1)
-        # show_difference(original, img, file.name)
+        show_difference(original, img, file.name)
         img1 = img.copy()
         _timing_start = time.time()
 
@@ -127,9 +129,6 @@ for file in image_dir.iterdir():
     # img = original.copy()
     # for l in lines:
     #     cv.drawContours(img, [contours[l]], -1, (0,0,255), 4, cv.LINE_AA, None, 1)
-    
-    
-    
 
     # cv.drawContours(img, [contours[edge_lines[0]]], -1, 255, 3, cv.LINE_AA, None, 1)
     # cv.drawContours(img, [contours[edge_lines[1]]], -1, 255, 3, cv.LINE_AA, None, 1)
@@ -174,17 +173,85 @@ for file in image_dir.iterdir():
     # img_contours = img.copy()
     # img_contours = np.zeros(size, dtype=np.uint8)
     img = original.copy()
-    cv.line(img, *top_edge.segment(*size), [0, 255, 0], 3)
-    cv.line(img, *bottom_edge.segment(*size), [0, 0, 255], 3)
-    # cv.drawContours(img_contours, [contours[edge_lines[0]]], -1, (255,0,0), 3, cv.LINE_AA, None, 1)
-    # cv.drawContours(img_contours, [contours[edge_lines[1]]], -1, (255,0,0), 3, cv.LINE_AA, None, 1)
+    cv.line(img, *top_edge.segment(*size), [255], 3)
+    cv.line(img, *bottom_edge.segment(*size), [255], 3)
+    cv.drawContours(img, [contours[edge_lines[0]]], -1, (255,0,0), 3, cv.LINE_AA, None, 1)
+    cv.drawContours(img, [contours[edge_lines[1]]], -1, (255,0,0), 3, cv.LINE_AA, None, 1)
+    show_difference(original, img, file.name)
+
+    result = model([img])
+    img = result.render()[0]
+    show_difference(original, img, file.name)
+
+    # roi_top = PolarLine(top_edge.rho*1.5 - bottom_edge.rho*0.5, top_edge.theta)
+    # cv.line(img, *roi_top.segment(*size), [255, 0, 0], 3)
+    # pts = np.array([[0,0], *roi_top.segment(*size), [size[1],0]], np.int32).reshape((-1,1,2))
+    # cv.fillPoly(img, [pts], (0))
+    # show_difference(original, img, file.name)
+    
+    # roi_points = sorted(list(bottom_edge.segment(*size)), key=lambda x: x[1])
+    # y_crop = roi_points[0][1]
+    # if y_crop > 830:
+    #     # TODO
+    #     continue
+    # pts = np.array([[0,0], *sorted(roi_points, key=lambda x: x[0]), [size[1],0]], np.int32).reshape((-1,1,2))
+    # cv.fillPoly(img, [pts], 0)
+
+    # img = cv.resize(img, (size[1]//10, size[0]))
+    # print(y_crop)
+    # img = img[y_crop:img.shape[0], 0:img.shape[1]]
+    # lines = cv.HoughLines(img, 1.4, np.pi / 180, 250, None, 0, 0)
+    # down_pts = []
+    # bottom_center = img.shape[1]//2
+    # if lines is not None:
+    #     for i, l in enumerate(lines):
+    #         f = PolarLine(*l[0])
+    #         down_pts.append((bottom_center - f.x(img.shape[0]-1), i))
+    #         # cv.line(img, *f.segment(*img.shape[:2]), 255, 1)
+    # down_pts.sort(key=lambda x: abs(x[0]))
+    # left, right = None, None
+    # for d, i in down_pts:
+    #     if d < 0 and left is None:
+    #         left = lines[i]
+    #     elif right is None:
+    #         right = lines[i]
+    #     if left is not None and right is not None:
+    #         break
+    # if right is None:
+    #     right = left
+    #     left = None
+    # if left is not None:
+    #     left = PolarLine(*left[0])
+    #     cv.line(img, *left.segment(*img.shape[:2]), [255], 1)
+    # if right is not None:
+    #     right = PolarLine(*right[0])
+    #     cv.line(img, *right.segment(*img.shape[:2]), [255], 1)
+    # show_difference(original, img, file.name)
+    # img = original.copy()
+    # if left is not None:
+    #     # left = PolarLine(*left[0])
+    #     top = left.x(img.shape[0] - size[0]) * 10
+    #     bot = left.x(img.shape[0]) * 10
+    #     left = PolarLine.from_points((top, 0), (bot, size[0]))
+    #     cv.line(img, *left.segment(*size), [0,0,255], 3)
+    # if right is not None:
+    #     # right = PolarLine(*right[0])
+    #     top = right.x(img.shape[0] - size[0]) * 10
+    #     bot = right.x(img.shape[0]) * 10
+    #     right = PolarLine.from_points((top, 0), (bot, size[0]))
+    #     cv.line(img, *right.segment(*size), [0,0,255], 3)
+    # show_difference(original, img, file.name)
+
+
 
     # x = round(min(
     #     bottom_edge.distance((size[1]//4, size[0])),
     #     bottom_edge.distance((size[1]*3//4, size[0]))
     # ) * 0.2, 2)
-    x = bottom_edge.distance((size[1]*5//8, size[0]))
-    print(file.name, round(x * c1 + c2, 1))
+
+
+    # x = bottom_edge.distance((size[1]*5//8, size[0]))
+    # print(file.name, round(x * c1 + c2, 1))
     # show_difference(original, img, file.name, result_text=str(x))
 
     # ищем левую нижнюю и левую верхнюю точки левого контура
